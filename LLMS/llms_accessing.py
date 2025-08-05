@@ -10,7 +10,7 @@ def llm_response(msg_to_repond_to):
         "Authorization": f"Bearer {api_key}"
     }
     payload = {
-        "model": "llama3-8b-8192",  # You can also try "llama3-70b-8192"
+        "model": "llama3-8b-8192",     
         "messages": [
             {"role": "user", "content": msg_to_repond_to},
         ],
