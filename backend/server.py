@@ -1,10 +1,55 @@
+"""
+Flask Web Application for Document Upload and RAG-based Chatbot.
+
+This application allows users to:
+1. Upload a document (.txt, .pdf, .docx).
+2. Extract its text content in-memory without saving the file.
+3. Store the extracted content in a local persistent ChromaDB collection.
+4. Interact with a chatbot that uses Retrieval-Augmented Generation (RAG)
+   to answer questions based on both the uploaded content and an LLM.
+
+Modules Used
+------------
+- flask:
+    For creating the web application and handling HTTP routes.
+- dotenv:
+    Loads environment variables from a .env file.
+- chroma_store.chroma_client:
+    Handles storing and querying text data in ChromaDB.
+- text_extraction.text_extractor:
+    Extracts text from file bytes depending on the file type.
+- llms.llms_accessing:
+    Provides the LLM interface to generate augmented chatbot responses.
+- requests.exceptions:
+    Handles network and HTTP errors gracefully.
+
+Routes
+------
+- GET  /           : Renders the upload page (`upload.html`).
+- POST /upload     : Handles file uploads, extracts text, stores it in ChromaDB,
+                     then redirects to the chatbot.
+- GET  /chatbot    : Renders the chatbot interface (`index.html`).
+- POST /chat       : Processes chat messages, retrieves relevant context
+                     from ChromaDB, and returns an LLM-generated reply.
+
+Workflow
+--------
+1. User uploads a document.
+2. The file is read into memory, text is extracted, and stored in ChromaDB.
+3. The user is redirected to the chatbot interface.
+4. When the user sends a message, the app queries ChromaDB for related content.
+5. The retrieved context is combined with the user query and sent to the LLM.
+6. The LLM response is returned and displayed in the chatbot UI.
+
+This module is the main entry point for running the Flask development server.
+"""
+
 from flask import Flask, render_template, request, jsonify, redirect, url_for
 from dotenv import load_dotenv
 from requests.exceptions import RequestException, Timeout, HTTPError
 from llms.llms_accessing import llm_response
 from chroma_store.chroma_client import add_file_to_collection, query_collection
 from text_extraction.text_extractor import extract_text  # now works with file_bytes
-import os
 
 # Load environment variables from .env
 load_dotenv()
@@ -36,8 +81,11 @@ def upload_file():
         # Store extracted lines in ChromaDB
         add_file_to_collection(lines, file.filename)
 
-    except Exception as e:
-        return f"Error processing file: {e}", 400
+    except ValueError as e:
+        return f"File processing error: {e}", 400
+
+    except (OSError, IOError) as e:
+        return f"File read error: {e}", 500
 
     # Redirect to chatbot page after successful processing
     return redirect(url_for('chatbot'))
