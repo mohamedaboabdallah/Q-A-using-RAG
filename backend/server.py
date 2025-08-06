@@ -3,22 +3,22 @@ from dotenv import load_dotenv
 from requests.exceptions import RequestException, Timeout, HTTPError
 from llms.llms_accessing import llm_response
 from chroma_store.chroma_client import add_file_to_collection, query_collection
-from text_extraction.text_extractor import extract_text
+from text_extraction.text_extractor import extract_text  # now works with file_bytes
 import os
 
+# Load environment variables from .env
 load_dotenv()
 
 app = Flask(__name__)
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 @app.route('/')
 def upload_page():
+    """Render the upload page."""
     return render_template('upload.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    """Handle file upload and store extracted text in ChromaDB."""
     if 'document' not in request.files:
         return "No file part", 400
 
@@ -26,20 +26,21 @@ def upload_file():
     if file.filename == '':
         return "No selected file", 400
 
-    if file:
-        file_path = os.path.join(app.config['UPLOAD_FOLDER'], file.filename)
-        file.save(file_path)
+    try:
+        # Read file directly into memory
+        file_bytes = file.read()
 
-        try:
-            lines = extract_text(file_path)
-            add_file_to_collection(lines, file.filename)
-        except Exception as e:
-            return f"Error processing file: {e}", 400
+        # Extract text from bytes (text_extractor must support this)
+        lines = extract_text(file_bytes, file.filename)
 
-        return redirect(url_for('chatbot'))
+        # Store extracted lines in ChromaDB
+        add_file_to_collection(lines, file.filename)
 
-    return "Upload failed", 400
+    except Exception as e:
+        return f"Error processing file: {e}", 400
 
+    # Redirect to chatbot page after successful processing
+    return redirect(url_for('chatbot'))
 
 @app.route('/chatbot')
 def chatbot():
@@ -50,7 +51,7 @@ def chatbot():
 def chat():
     """
     Handle chat requests and return an LLM response
-    augmented with retrieved context from remote ChromaDB.
+    augmented with retrieved context from ChromaDB.
     """
     user_message = request.json['message']
     try:

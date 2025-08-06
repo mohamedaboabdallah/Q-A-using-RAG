@@ -3,7 +3,7 @@ from chromadb.config import Settings
 import uuid
 
 COLLECTION_NAME = "RAG_files"
-chroma_client = chromadb.PersistentClient(path="chroma_db")  # local storage, no server needed
+chroma_client = chromadb.PersistentClient(path="chroma_db")  # persists locally
 
 def get_or_create_collection():
     return chroma_client.get_or_create_collection(name=COLLECTION_NAME)
