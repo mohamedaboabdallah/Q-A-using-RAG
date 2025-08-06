@@ -43,12 +43,16 @@ def llm_response(msg_to_repond_to):
         "Authorization": f"Bearer {api_key}"
     }
     payload = {
-        "model": "llama3-8b-8192",     
+        "model": "llama3-8b-8192",#Specifies the model you want to use deployed on Groq
         "messages": [
             {"role": "user", "content": msg_to_repond_to},
         ],
-        "temperature": 0.7,
-        "max_tokens": 512
+        #A list of message dictionaries, where each message has a role 
+        #(system, user, or assistant) and content.
+        #It's how you build a conversation history.
+        "temperature": 0.7, # Controls randomness in the model's responses
+        # 0.2 -> more deterministic, 1+ -> more creative and random
+        "max_tokens": 512  #Limits the number of tokens (words + symbols) in the response.
     }
     response = requests.post(url, headers=headers, json=payload, timeout=10)
     if response.status_code == 200:
