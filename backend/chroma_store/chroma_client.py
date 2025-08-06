@@ -1,21 +1,26 @@
 import chromadb
-chroma_client = chromadb.PersistentClient()
+from chromadb.config import Settings
+import uuid
 
-# switch `create_collection` to `get_or_create_collection` to avoid creating a new collection every time
-collection = chroma_client.get_or_create_collection(name="my_collection")
+COLLECTION_NAME = "RAG_files"
+chroma_client = chromadb.PersistentClient(path="chroma_db")  # local storage, no server needed
 
-# switch `add` to `upsert` to avoid adding the same documents every time
-collection.upsert(
-    documents=[
-        "This is a document about oranges",
-        "This is a document about pineapple"
-    ],
-    ids=["id1", "id2"]
-)
+def get_or_create_collection():
+    return chroma_client.get_or_create_collection(name=COLLECTION_NAME)
 
-results = collection.query(
-    query_texts=["what about pineapple"], # Chroma will embed this for you
-    n_results=1 # how many results to return
-)
+def add_file_to_collection(lines, file_name):
+    """Add already-extracted text lines to ChromaDB."""
+    collection = get_or_create_collection()
+    collection.upsert(
+        ids=[str(uuid.uuid4()) for _ in lines],
+        documents=lines,
+        metadatas=[{"line": i, "source_file": file_name} for i in range(len(lines))]
+    )
 
-print(results["documents"]) # prints the documents that match the query
+def query_collection(user_query, n_results=5):
+    collection = get_or_create_collection()
+    results = collection.query(
+        query_texts=[user_query],
+        n_results=n_results
+    )
+    return results["documents"]

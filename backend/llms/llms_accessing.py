@@ -50,9 +50,9 @@ def llm_response(msg_to_repond_to):
         #A list of message dictionaries, where each message has a role 
         #(system, user, or assistant) and content.
         #It's how you build a conversation history.
-        "temperature": 0.7, # Controls randomness in the model's responses
+        "temperature": 0.2, # Controls randomness in the model's responses
         # 0.2 -> more deterministic, 1+ -> more creative and random
-        "max_tokens": 512  #Limits the number of tokens (words + symbols) in the response.
+        "max_tokens": 1024  #Limits the number of tokens (words + symbols) in the response.
     }
     response = requests.post(url, headers=headers, json=payload, timeout=10)
     if response.status_code == 200:
