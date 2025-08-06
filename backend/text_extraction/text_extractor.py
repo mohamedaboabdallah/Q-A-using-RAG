@@ -1,3 +1,36 @@
+"""
+Text Extraction Utility Module for RAG Applications.
+
+This module provides functions to extract plain text content from
+uploaded files in various formats. It supports text files (.txt),
+PDF documents (.pdf), and Microsoft Word documents (.docx).
+
+All functions operate on in-memory file bytes rather than file paths,
+making them suitable for web applications where files are uploaded
+via HTTP requests.
+
+Features
+--------
+- Automatic encoding detection for `.txt` files using `chardet`
+- PDF text extraction using `PyPDF2`
+- Word document text extraction using `python-docx`
+- Unified interface that returns extracted content as a list of strings
+
+Functions
+---------
+- read_txt_from_bytes(file_bytes):
+    Reads text from raw bytes of a `.txt` file, detecting encoding automatically.
+
+- extract_text(file_bytes, filename):
+    Determines file type from its extension and extracts text lines accordingly.
+
+Usage
+-----
+This module is intended to be used by the file upload route in a Flask
+application before storing the extracted text in ChromaDB or another
+vector database for Retrieval-Augmented Generation (RAG) pipelines.
+"""
+
 import os
 import io
 import chardet
@@ -17,14 +50,10 @@ def extract_text(file_bytes, filename):
 
     if ext == '.txt':
         return read_txt_from_bytes(file_bytes)
-
-    elif ext == '.pdf':
+    if ext == '.pdf':
         reader = PdfReader(io.BytesIO(file_bytes))
         return [page.extract_text() for page in reader.pages if page.extract_text()]
-
-    elif ext == '.docx':
+    if ext == '.docx':
         doc = docx.Document(io.BytesIO(file_bytes))
         return [para.text for para in doc.paragraphs if para.text.strip()]
-
-    else:
-        raise ValueError(f"Unsupported file type: {ext}")
+    raise ValueError(f"Unsupported file type: {ext}")

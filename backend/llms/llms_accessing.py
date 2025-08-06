@@ -47,7 +47,7 @@ def llm_response(msg_to_repond_to):
         "messages": [
             {"role": "user", "content": msg_to_repond_to},
         ],
-        #A list of message dictionaries, where each message has a role 
+        #A list of message dictionaries, where each message has a role
         #(system, user, or assistant) and content.
         #It's how you build a conversation history.
         "temperature": 0.2, # Controls randomness in the model's responses
