@@ -101,7 +101,7 @@ def upload_file(current_user):
         return jsonify({
             "status": "success",
             "message": "File processed successfully",
-            "filename": file.filename
+            "filename": "yourfile.pdf"
         })
 
     except ValueError as e:

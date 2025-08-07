@@ -8,12 +8,22 @@ const Upload = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
+  const [progress, setProgress] = useState(0); // NEW: Progress state
   const navigate = useNavigate();
 
   const handleFileChange = (e) => {
-    setFile(e.target.files[0]);
+    const selectedFile = e.target.files[0];
+    
+    // File size validation (5MB max)
+    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
+      setError('File size exceeds 5MB limit');
+      return;
+    }
+    
+    setFile(selectedFile);
     setError('');
     setSuccess(false);
+    setProgress(0); // Reset progress when file changes
   };
 
   const handleSubmit = async (e) => {
@@ -29,13 +39,30 @@ const Upload = () => {
     try {
       setIsLoading(true);
       setError('');
+      setProgress(0); // Reset progress on new upload
+      
+      // UPDATED: Added progress tracking
       await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { 'Content-Type': 'multipart/form-data' },
+        timeout: 30000,
+        onUploadProgress: (progressEvent) => {
+          const percentCompleted = Math.round(
+            (progressEvent.loaded * 100) / progressEvent.total
+          );
+          setProgress(percentCompleted);
+        }
       });
+      
       setSuccess(true);
       setTimeout(() => navigate('/chatbot'), 1500);
     } catch (err) {
-      setError(err.response?.data?.error || 'Upload failed. Please try again.');
+      if (err.code === 'ECONNABORTED') {
+        setError('Processing took too long. Try a smaller file.');
+      } else {
+        setError(err.response?.data?.error || 
+                err.message || 
+                'Upload failed. Please try again.');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -47,12 +74,14 @@ const Upload = () => {
         <h2>Upload Document</h2>
         <p className="instructions">Supported formats: .txt, .pdf, .docx</p>
         
-        {error && <div className="error-message">{error}</div>}
-        {success && (
-          <div className="success-message">
-            Document processed successfully! Redirecting to chat...
-          </div>
-        )}
+        <div className="message-container" style={{ minHeight: '3rem' }}>
+          {error && <div className="error-message">{error}</div>}
+          {success && (
+            <div className="success-message">
+              ✓ Document processed successfully! Redirecting to chat...
+            </div>
+          )}
+        </div>
         
         <form onSubmit={handleSubmit}>
           <div className="file-upload">
@@ -61,6 +90,7 @@ const Upload = () => {
                 type="file" 
                 onChange={handleFileChange}
                 accept=".txt,.pdf,.docx"
+                className="file-input"
               />
               <span className="file-button">Choose File</span>
               <span className="file-name">
@@ -69,12 +99,28 @@ const Upload = () => {
             </label>
           </div>
           
+          {/* NEW: Progress bar added here */}
+          {isLoading && (
+            <div className="progress-bar">
+              <div 
+                className="progress-fill" 
+                style={{ width: `${progress}%` }}
+              >
+                {progress}%
+              </div>
+            </div>
+          )}
+          
           <button 
             type="submit" 
             disabled={isLoading || !file}
-            className={isLoading ? 'loading' : ''}
+            className={`upload-button ${isLoading ? 'loading' : ''}`}
           >
-            {isLoading ? 'Processing...' : 'Upload Document'}
+            {isLoading ? (
+              <>
+                <span className="spinner"></span> Processing...
+              </>
+            ) : 'Upload Document'}
           </button>
         </form>
       </div>
