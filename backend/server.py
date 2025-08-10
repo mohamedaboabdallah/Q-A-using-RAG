@@ -182,7 +182,6 @@ def chat(current_user):
 
     user_message = data['query']
     try:
-        # Optionally filter by user in query_collection if supported, else as-is
         retrieved_docs = query_collection(user_message, n_results=3, user=current_user)
         matches = []
         if retrieved_docs and retrieved_docs[0]:
