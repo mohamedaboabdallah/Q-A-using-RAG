@@ -12,7 +12,7 @@ The system has a **Flask backend** and a **React frontend**.
 Q-A-using-RAG/
 │
 ├── backend/                   # Backend service (Flask API)
-│   ├── chroma_db/              # Database/embedding management
+│   ├── chroma_db/              # Database/embedding management (not tracked in Git, created automatically while running)
 │   ├── chroma_store/           # Chroma storage and retrieval logic
 │   ├── llms/                   # LLM interaction utilities
 │   ├── text_extraction/        # Text and document extraction scripts
@@ -20,8 +20,8 @@ Q-A-using-RAG/
 │   ├── .env                    # Environment variables (not tracked in Git)
 │   ├── requirements.txt        # Python dependencies
 │   ├── server.py               # Main Flask server
-│   ├── uploaded_files.json     # Tracks uploaded files metadata
-│   └── users_db.json           # Tracks registered users
+│   ├── uploaded_files.json     # Tracks uploaded files metadata (not tracked in Git, created automatically while running)
+│   └── users_db.json           # Tracks registered users (not tracked in Git, created automatically while running)
 │
 ├── frontend/                   # Frontend service (React)
 │   ├── public/                 # Static assets
