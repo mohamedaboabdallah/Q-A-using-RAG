@@ -13,22 +13,22 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
-    
+
     try {
       console.log("Attempting login with:", credentials);
-      
+
       const response = await api.post('/login', credentials);
-      console.log("Login response:", response);
-      
-      if (response.data && response.data.token) {
+      if (response.data?.token) {
         localStorage.setItem('token', response.data.token);
-        navigate('/upload');
-      } else {
+        localStorage.setItem('username', response.data.username || credentials.username);
+        navigate('/chatUpload');
+      }
+      else {
         throw new Error('No token received in response');
       }
     } catch (err) {
       console.error("Login error:", err);
-      
+
       // Handle Axios errors
       if (err.response) {
         // Server responded with error status (4xx, 5xx)
@@ -56,7 +56,7 @@ const Login = () => {
             <input
               type="text"
               value={credentials.username}
-              onChange={(e) => setCredentials({...credentials, username: e.target.value})}
+              onChange={(e) => setCredentials({ ...credentials, username: e.target.value })}
               required
             />
           </div>
@@ -65,24 +65,26 @@ const Login = () => {
             <input
               type="password"
               value={credentials.password}
-              onChange={(e) => setCredentials({...credentials, password: e.target.value})}
+              onChange={(e) => setCredentials({ ...credentials, password: e.target.value })}
               required
             />
           </div>
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={isLoading}
             className={isLoading ? 'loading' : ''}
           >
             {isLoading ? 'Logging in...' : 'Login'}
           </button>
         </form>
-        
+
         {/* Temporary testing credentials */}
         <div className="test-credentials">
-          <p>For testing, use any username and password</p>
-          <p>Example: username: <strong>test</strong>, password: <strong>test</strong></p>
+          <p style={{ textAlign: 'center', marginTop: '1rem' }}>
+            Don’t have an account? <a href="/register">Register</a>
+          </p>
         </div>
+
       </div>
     </div>
   );
