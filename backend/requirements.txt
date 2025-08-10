@@ -1,0 +1,11 @@
+chardet==3.0.4
+chromadb==1.0.16
+Flask==3.1.1
+flask_cors==6.0.1
+PyJWT==2.10.1
+PyJWT==2.10.1
+PyPDF2==3.0.1
+python-dotenv==1.1.1
+python_bcrypt==0.3.2
+python_docx==1.2.0
+Requests==2.32.4
