@@ -20,6 +20,7 @@ Q-A-using-RAG/
 │   ├── .env                    # Environment variables (not tracked in Git)
 │   ├── requirements.txt        # Python dependencies
 │   ├── server.py               # Main Flask server
+|   |── .gitignore              # Git ignore rules for backend
 │   ├── uploaded_files.json     # Tracks uploaded files metadata (not tracked in Git, created automatically while running)
 │   └── users_db.json           # Tracks registered users (not tracked in Git, created automatically while running)
 │
@@ -27,9 +28,9 @@ Q-A-using-RAG/
 │   ├── public/                 # Static assets
 │   ├── src/                    # React components and logic
 │   ├── package.json            # Node.js dependencies
+|   |── .gitignore              # Git ignore rules for frontend
 │   └── package-lock.json       # Dependency lock file
 │
-├── .gitignore                  # Git ignore rules
 └── README.md                   # Project documentation
 ```
 
