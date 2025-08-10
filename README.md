@@ -11,8 +11,8 @@ The system has a **Flask backend** and a **React frontend**.
 ```plaintext
 Q-A-using-RAG/
 │
-├── backend/                   # Backend service (Flask API)
-│   ├── database/              # Database  (not tracked in Git, created automatically while running)
+├── backend/                    # Backend service (Flask API)
+│   ├── database/               # Database  (not tracked in Git, created automatically while running)
 │   ├── chroma_store/           # Chroma storage and retrieval logic
 │   ├── llms/                   # LLM interaction utilities
 │   ├── text_extraction/        # Text and document extraction scripts
