@@ -1,96 +1,114 @@
-import React, { useRef, useState, useEffect } from 'react';
-import api from '../../services/api';
-import './chatUpload.css';
-import { useNavigate } from 'react-router-dom';
+import React, { useRef, useState, useEffect } from "react";
+import api from "../../services/api";
+import "./chatUpload.css";
+import { useNavigate } from "react-router-dom";
 
 const ChatUpload = () => {
   const fileInputRef = useRef(null);
   const [uploadedFiles, setUploadedFiles] = useState([]);
   const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [isUploading, setIsUploading] = useState(false);
-  const navigate = useNavigate();
-  const username = localStorage.getItem('username') || '';
 
+  const navigate = useNavigate();
+  const username = localStorage.getItem("username") || "";
+
+  // Redirect to login if no token
   useEffect(() => {
-    const token = localStorage.getItem('token');
+    const token = localStorage.getItem("token");
     if (!token) {
-      navigate('/login');
+      navigate("/Login");
       return;
     }
     fetchFiles();
   }, [navigate]);
 
-  const fetchFiles = async () => {
+  // Fetch uploaded files from backend, with simple retry
+  const fetchFiles = async (retryCount = 1) => {
     try {
-      const res = await api.get('/files');
+      const res = await api.get("/files");
       setUploadedFiles(res.data.files || []);
     } catch (err) {
-      console.error('Error fetching files', err);
+      console.error("Error fetching files:", err);
+      if (retryCount > 0) {
+        console.log("Retrying fetchFiles...");
+        setTimeout(() => fetchFiles(retryCount - 1), 500);
+      }
     }
   };
 
+  // Trigger file picker
   const handleUploadClick = () => {
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
       fileInputRef.current.click();
     }
   };
 
+  // Handle file selection & upload
   const handleFileChange = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     if (file.size > 5 * 1024 * 1024) {
-      alert('File > 5MB. Choose a smaller file.');
+      alert("File size exceeds 5MB. Please choose a smaller file.");
       return;
     }
 
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("document", file);
 
     try {
       setIsUploading(true);
-      const res = await api.post('/upload', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // No manual Content-Type header, let Axios handle it
+      const res = await api.post("/upload", formData);
+
+      await new Promise(resolve => setTimeout(resolve, 1000)); // increase delay a bit
       await fetchFiles();
-      alert(res.data?.message || 'Uploaded successfully');
+
+      alert(res.data?.message || "File uploaded successfully");
     } catch (err) {
-      console.error('Upload error', err);
-      alert(err.response?.data?.error || 'Upload failed');
+      console.error("Upload error:", err);
+      alert(err.response?.data?.error || "Upload failed");
     } finally {
       setIsUploading(false);
     }
   };
 
+  // Send a chat message
   const sendMessage = async () => {
-    if (!input.trim()) return;
-    setMessages(prev => [...prev, { sender: 'user', text: input }]);
-    const text = input;
-    setInput('');
+    const trimmed = input.trim();
+    if (!trimmed) return;
+
+    setMessages((prev) => [...prev, { sender: "user", text: trimmed }]);
+    setInput("");
+
     try {
-      const res = await api.post('/query', { query: text });
-      const botReply = res.data?.matches?.length
-        ? res.data.matches.map(m => m.text || '').join('\n')
-        : 'No relevant results found.';
-      setMessages(prev => [...prev, { sender: 'bot', text: botReply }]);
+      const res = await api.post("/chat", { query: trimmed });
+      const botReply = res.data?.reply || "No response available.";
+
+      setMessages((prev) => [...prev, { sender: "bot", text: botReply }]);
     } catch (err) {
-      console.error('Chat error', err);
-      setMessages(prev => [...prev, { sender: 'bot', text: 'Error: ' + (err.response?.data?.error || 'Chat failed') }]);
+      console.error("Chat error:", err);
+      setMessages((prev) => [
+        ...prev,
+        { sender: "bot", text: "Error: " + (err.response?.data?.error || "Chat failed") },
+      ]);
     }
   };
 
+  // Navigate to login without clearing storage
   const handleLogout = () => {
-    // Keep localStorage values, just navigate away
-    navigate('/login');
+    navigate("/login");
   };
 
   return (
     <div className="chat-page">
       <div className="navbar">
         <span>Hello, {username}</span>
-        <button className="logout-btn" onClick={handleLogout}>Logout</button>
+        <button className="logout-btn" onClick={handleLogout}>
+          Logout
+        </button>
       </div>
 
       <div className="chatupload-container">
@@ -101,7 +119,9 @@ const ChatUpload = () => {
               <div>No documents yet</div>
             ) : (
               uploadedFiles.map((f) => (
-                <div key={f.id || f.filename} className="file-item">{f.filename}</div>
+                <div key={f.id || f.filename} className="file-item">
+                  {f.filename}
+                </div>
               ))
             )}
           </div>
@@ -109,20 +129,20 @@ const ChatUpload = () => {
           <input
             type="file"
             ref={fileInputRef}
-            style={{ display: 'none' }}
+            style={{ display: "none" }}
             onChange={handleFileChange}
             accept=".txt,.pdf,.docx"
           />
 
           <button onClick={handleUploadClick} className="upload-btn" disabled={isUploading}>
-            {isUploading ? 'Uploading...' : 'Upload File'}
+            {isUploading ? "Uploading..." : "Upload File"}
           </button>
         </div>
 
         <div className="chat-section">
           <div className="messages">
             {messages.map((m, i) => (
-              <div key={i} className={`msg ${m.sender === 'user' ? 'user' : 'bot'}`}>
+              <div key={i} className={`msg ${m.sender === "user" ? "user" : "bot"}`}>
                 {m.text}
               </div>
             ))}
@@ -133,7 +153,7 @@ const ChatUpload = () => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Type a message..."
-              onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
             />
             <button onClick={sendMessage}>➤</button>
           </div>

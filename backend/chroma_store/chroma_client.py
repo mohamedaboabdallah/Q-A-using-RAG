@@ -31,72 +31,68 @@ This module is intended to be used by other application components (e.g.,
 Flask routes) to store documents extracted from uploaded files and to
 retrieve relevant context for augmenting LLM prompts.
 """
-
 import uuid
 import chromadb
 
-COLLECTION_NAME = "RAG_files"
+BASE_COLLECTION_NAME = "RAG_files"
 chroma_client = chromadb.PersistentClient(path="chroma_db")  # persists locally
 
-def get_or_create_collection():
+
+def get_or_create_collection(user: str = None):
     """
-    Retrieve the existing ChromaDB collection or create it if it does not exist.
-
-    Returns
-    -------
-    chromadb.api.models.Collection.Collection
-        The ChromaDB collection object for storing and retrieving documents.
+    Returns the collection for the given user.
+    Option 1: Use separate collections per user (uncomment below)
+    Option 2: Use single shared collection with user metadata filtering (recommended)
     """
-    return chroma_client.get_or_create_collection(name=COLLECTION_NAME)
+    return chroma_client.get_or_create_collection(name=BASE_COLLECTION_NAME)
 
-def add_file_to_collection(lines, file_name):
+
+def delete_file_from_collection(file_name, user):
+    """Remove all entries for a given file and user from the collection."""
+    collection = get_or_create_collection(user)
+    existing = collection.get(
+        where={
+            "$and": [
+                {"source_file": {"$eq": file_name}},
+                {"user": {"$eq": user}}
+            ]
+        }
+    )
+    if existing["ids"]:
+        collection.delete(ids=existing["ids"])
+
+
+
+def add_file_to_collection(lines, file_name, user):
     """
-    Add already-extracted text lines to the ChromaDB collection.
-
-    Each line is stored as a separate document with a unique UUID and metadata
-    including its line index and the source file name.
-
-    Parameters
-    ----------
-    lines : list of str
-        A list of text segments (e.g., lines or chunks) extracted from a file.
-    file_name : str
-        The name of the original file from which the text was extracted.
-
-    Returns
-    -------
-    None
+    Add extracted text lines to ChromaDB for the given user,
+    replacing any old entries for that file by the user.
     """
-    collection = get_or_create_collection()
+    collection = get_or_create_collection(user)
+
+    # Remove old entries for the file for this user only
+    delete_file_from_collection(file_name, user)
+
+    cleaned_lines = [line.strip() for line in lines if line.strip()]
+    if not cleaned_lines:
+        return
+
     collection.upsert(
-        ids=[str(uuid.uuid4()) for _ in lines],
-        documents=lines,
-        metadatas=[{"line": i, "source_file": file_name} for i in range(len(lines))]
+        ids=[str(uuid.uuid4()) for _ in cleaned_lines],
+        documents=cleaned_lines,
+        metadatas=[{"line": i, "source_file": file_name, "user": user} for i in range(len(cleaned_lines))]
     )
 
-def query_collection(user_query, n_results=5):
+
+def query_collection(user_query, user, n_results=5):
     """
-    Query the ChromaDB collection for the most relevant documents.
-
-    Uses the provided user query to retrieve the top matching documents
-    from the persistent ChromaDB collection based on vector similarity.
-
-    Parameters
-    ----------
-    user_query : str
-        The search query or question to match against stored documents.
-    n_results : int, optional
-        The maximum number of relevant documents to retrieve (default is 5).
-
-    Returns
-    -------
-    list of list of str
-        A list of lists, where each inner list contains the text of the
-        retrieved documents for each query provided.
+    Query collection with a filter to only return documents
+    uploaded by the specified user.
     """
-    collection = get_or_create_collection()
+    collection = get_or_create_collection(user)
     results = collection.query(
         query_texts=[user_query],
-        n_results=n_results
+        n_results=n_results,
+        where={"user": user}
     )
     return results["documents"]
