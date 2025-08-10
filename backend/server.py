@@ -1,8 +1,9 @@
 import os
 import jwt
+import bcrypt
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, request, jsonify, make_response
+from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
 from requests.exceptions import RequestException, Timeout, HTTPError
@@ -10,25 +11,34 @@ from llms.llms_accessing import llm_response
 from chroma_store.chroma_client import add_file_to_collection, query_collection
 from text_extraction.text_extractor import extract_text
 
-# Load environment variables
 load_dotenv()
-from flask_cors import CORS
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
-# JWT Configuration
+
+# Allow all origins for simplicity - restrict in production!
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
-app.config['JWT_EXPIRATION'] = int(os.getenv('JWT_EXPIRATION', 3600))  # 1 hour
+app.config['JWT_EXPIRATION'] = int(os.getenv('JWT_EXPIRATION', 3600))
+
+# Store uploaded files per user: { username: [file_info, ...] }
+uploaded_files = {}
+
+# Store users with hashed passwords
+users_db = {}
+
 
 def token_required(f):
-    """JWT Authentication Decorator"""
+
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
-        # Get token from Authorization header
-        if 'Authorization' in request.headers:
-            token = request.headers['Authorization'].split(" ")[1]
-        
+        auth_header = request.headers.get('Authorization', None)
+        if auth_header:
+            parts = auth_header.split()
+            if len(parts) == 2 and parts[0].lower() == 'bearer':
+                token = parts[1]
+
         if not token:
             return jsonify({'error': 'Authorization token is missing'}), 401
 
@@ -46,36 +56,82 @@ def token_required(f):
 
     return decorated
 
+
+def generate_token(username):
+    token = jwt.encode({
+        'sub': username,
+        'iat': datetime.utcnow(),
+        'exp': datetime.utcnow() + timedelta(seconds=app.config['JWT_EXPIRATION'])
+    }, app.config['SECRET_KEY'], algorithm='HS256')
+    return token
+
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({'error': 'Missing username or password'}), 400
+
+    if username in users_db:
+        return jsonify({'error': 'User already exists'}), 400
+
+    # Hash password
+    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+    # Store user
+    users_db[username] = hashed_pw
+
+    # Initialize empty file list for this user
+    uploaded_files[username] = []
+
+    token = generate_token(username)
+
+    return jsonify({'token': token, 'username': username}), 201
+
+
 @app.route('/api/login', methods=['POST'])
 def login():
-    auth = request.json
-    if not auth or not auth.get('username') or not auth.get('password'):
-        return jsonify({'error': 'Missing credentials'}), 400
-    
+    data = request.json
+    username = data.get('username')
+    password = data.get('password')
+
+    if not username or not password:
+        return jsonify({'error': 'Missing username or password'}), 400
+
+    hashed_pw = users_db.get(username)
+
+    if not hashed_pw:
+        return jsonify({'error': 'User not found'}), 401
+
+    if not bcrypt.checkpw(password.encode('utf-8'), hashed_pw):
+        return jsonify({'error': 'Incorrect password'}), 401
+
+    token = generate_token(username)
+
+    # Ensure user has file list initialized
+    if username not in uploaded_files:
+        uploaded_files[username] = []
+
+    return jsonify({'token': token, 'username': username}), 200
+
+
+@app.route('/api/files', methods=['GET'])
+@token_required
+def get_files(current_user):
     try:
-        # Accept any non-empty credentials
-        username = auth['username']
-        
-        # Create JWT token
-        token = jwt.encode({
-            'sub': username,
-            'iat': datetime.utcnow(),
-            'exp': datetime.utcnow() + timedelta(seconds=app.config['JWT_EXPIRATION'])
-        }, app.config['SECRET_KEY'], algorithm="HS256")
-        
-        return jsonify({
-            'token': token,
-            'username': username,
-            'expires_in': app.config['JWT_EXPIRATION']
-        })
-        
+        # Return only files for current user
+        user_files = uploaded_files.get(current_user, [])
+        return jsonify({"files": user_files})
     except Exception as e:
-        return jsonify({'error': f'Login processing error: {str(e)}'}), 500
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
 
 @app.route('/api/upload', methods=['POST'])
 @token_required
 def upload_file(current_user):
-    """Handle file upload and store in ChromaDB"""
     if 'document' not in request.files:
         return jsonify({"error": "No file part"}), 400
 
@@ -84,24 +140,29 @@ def upload_file(current_user):
         return jsonify({"error": "No selected file"}), 400
 
     try:
-        # Check file extension
         valid_extensions = {'.txt', '.pdf', '.docx'}
         if not any(file.filename.lower().endswith(ext) for ext in valid_extensions):
             return jsonify({"error": "Invalid file type"}), 400
 
-        # Read file into memory
         file_bytes = file.read()
-
-        # Extract text
         lines = extract_text(file_bytes, file.filename)
 
-        # Store in ChromaDB
-        add_file_to_collection(lines, file.filename)
+        # Store file contents in chroma DB, per your original logic
+        add_file_to_collection(lines, file.filename, user=current_user)
+
+        file_info = {
+            "id": len(uploaded_files.get(current_user, [])) + 1,
+            "filename": file.filename,
+            "uploaded_at": datetime.utcnow().isoformat()
+        }
+
+        # Append to current user's uploaded files list
+        uploaded_files.setdefault(current_user, []).append(file_info)
 
         return jsonify({
             "status": "success",
             "message": "File processed successfully",
-            "filename": "yourfile.pdf"
+            "filename": file.filename
         })
 
     except ValueError as e:
@@ -111,34 +172,36 @@ def upload_file(current_user):
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
+
 @app.route('/api/chat', methods=['POST'])
 @token_required
 def chat(current_user):
-    """Handle chat requests with RAG"""
     data = request.json
-    if not data or 'message' not in data:
-        return jsonify({"error": "Missing message parameter"}), 400
+    if not data or 'query' not in data:
+        return jsonify({"error": "Missing query parameter"}), 400
 
-    user_message = data['message']
-    
+    user_message = data['query']
     try:
-        # Retrieve relevant context
-        retrieved_docs = query_collection(user_message, n_results=3)
-        context_text = "\n".join(sum(retrieved_docs, []))  # flatten
+        retrieved_docs = query_collection(user_message, n_results=3, user=current_user)
+        matches = []
+        if retrieved_docs and retrieved_docs[0]:
+            for doc in retrieved_docs[0]:
+                matches.append({"text": doc})
 
-        # Augment prompt with context
-        augmented_prompt = f"""
-        Use the following context to answer the question.
-        Context:
-        {context_text}
+        if matches:
+            context_text = "\n".join([m["text"] for m in matches])
+            augmented_prompt = f"""
+            Use the following context to answer the question.
+            Context:
+            {context_text}
 
-        Question:
-        {user_message}
-        """
-
-        reply = llm_response(augmented_prompt)
-
-        return jsonify({'reply': reply})
+            Question:
+            {user_message}
+            """
+            reply = llm_response(augmented_prompt)
+            return jsonify({'matches': matches, 'reply': reply})
+        else:
+            return jsonify({'matches': [], 'reply': "No relevant context found for your query."})
 
     except Timeout:
         return jsonify({'error': "Request timed out"}), 504
@@ -150,6 +213,7 @@ def chat(current_user):
         return jsonify({'error': f"Request error: {str(e)}"}), 500
     except Exception as e:
         return jsonify({'error': f"Server error: {str(e)}"}), 500
+
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=True)
