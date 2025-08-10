@@ -1,6 +1,7 @@
 import os
 import jwt
 import bcrypt
+import json
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, request, jsonify
@@ -21,15 +22,28 @@ CORS(app, resources={r"/api/*": {"origins": "*"}})
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['JWT_EXPIRATION'] = int(os.getenv('JWT_EXPIRATION', 3600))
 
-# Store uploaded files per user: { username: [file_info, ...] }
-uploaded_files = {}
+USERS_FILE = 'users_db.json'
+FILES_FILE = 'uploaded_files.json'
 
-# Store users with hashed passwords
-users_db = {}
+
+def load_json(filename):
+    if os.path.exists(filename):
+        with open(filename, 'r') as f:
+            return json.load(f)
+    return {}
+
+
+def save_json(data, filename):
+    with open(filename, 'w') as f:
+        json.dump(data, f, indent=2)
+
+
+# Load persisted data on startup
+users_db = load_json(USERS_FILE)
+uploaded_files = load_json(FILES_FILE)
 
 
 def token_required(f):
-
     @wraps(f)
     def decorated(*args, **kwargs):
         token = None
@@ -80,12 +94,16 @@ def register():
 
     # Hash password
     hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+    hashed_pw_str = hashed_pw.decode('utf-8')  # Convert bytes to str for JSON storage
 
     # Store user
-    users_db[username] = hashed_pw
+    users_db[username] = hashed_pw_str
+    save_json(users_db, USERS_FILE)
 
     # Initialize empty file list for this user
-    uploaded_files[username] = []
+    if username not in uploaded_files:
+        uploaded_files[username] = []
+        save_json(uploaded_files, FILES_FILE)
 
     token = generate_token(username)
 
@@ -101,10 +119,12 @@ def login():
     if not username or not password:
         return jsonify({'error': 'Missing username or password'}), 400
 
-    hashed_pw = users_db.get(username)
+    hashed_pw_str = users_db.get(username)
 
-    if not hashed_pw:
+    if not hashed_pw_str:
         return jsonify({'error': 'User not found'}), 401
+
+    hashed_pw = hashed_pw_str.encode('utf-8')  # Convert str back to bytes
 
     if not bcrypt.checkpw(password.encode('utf-8'), hashed_pw):
         return jsonify({'error': 'Incorrect password'}), 401
@@ -114,6 +134,7 @@ def login():
     # Ensure user has file list initialized
     if username not in uploaded_files:
         uploaded_files[username] = []
+        save_json(uploaded_files, FILES_FILE)
 
     return jsonify({'token': token, 'username': username}), 200
 
@@ -158,6 +179,7 @@ def upload_file(current_user):
 
         # Append to current user's uploaded files list
         uploaded_files.setdefault(current_user, []).append(file_info)
+        save_json(uploaded_files, FILES_FILE)
 
         return jsonify({
             "status": "success",

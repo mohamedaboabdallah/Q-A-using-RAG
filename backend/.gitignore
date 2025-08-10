@@ -1,3 +1,5 @@
 .env
 chroma_db
 uploads
+uploaded_files.json
+users_db.json
