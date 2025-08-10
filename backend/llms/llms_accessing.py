@@ -47,9 +47,9 @@ def llm_response(msg_to_repond_to):
         "messages": [
             {"role": "user", "content": msg_to_repond_to},
         ],
-        "temperature": 0.1,   # low randomness for accurate responses
-        "max_tokens": 512,    # enough length for detailed answers
-        "top_p": 0.9          # balances focus and creativity
+        "temperature": 0.7,   # more randomness → more flexible answers
+        "max_tokens": 1024,   # allow longer, more nuanced responses
+        "top_p": 0.9          # include a wider set of possible tokens
     }
     response = requests.post(url, headers=headers, json=payload, timeout=10)
     if response.status_code == 200:

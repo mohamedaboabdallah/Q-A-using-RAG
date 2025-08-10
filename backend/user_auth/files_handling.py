@@ -27,9 +27,9 @@ application components that require access to user-related data.
 
 import os
 import json
-
-USERS_FILE = 'users_db.json'
-FILES_FILE = 'uploaded_files.json'
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # go up from chroma_store to backend
+USERS_FILE= os.path.join(BASE_DIR, "database", "users_db.json")
+FILES_FILE= os.path.join(BASE_DIR, "database", "uploaded_files.json")
 def load_json(filename):
     """
     Load JSON data from a file.

@@ -284,14 +284,16 @@ def chat(current_user):
         if matches:
             context_text = "\n".join([m["text"] for m in matches])
             augmented_prompt = f"""
-            You are an AI assistant. Use ONLY the information provided in the Context below to answer the question.  
-            If the answer is not contained in the Context, respond with: "The answer is not in the provided context."
+            You are an AI assistant. Use the information in the Context below as your primary source to answer the question.  
+            If the answer is unclear or incomplete in the Context,tell the user that this is the provided information.
+            If the answer is not in the Context, say "I cannot answer that based on the provided information."
 
             Context:
             {context_text}
 
             Question:
             {user_message}
+
             Answer:
             """
             reply = llm_response(augmented_prompt)

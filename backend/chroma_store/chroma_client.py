@@ -36,12 +36,14 @@ Usage:
 Intended for integration into backend components (e.g., Flask routes) to manage
 user-specific document ingestion and retrieval for augmenting language model prompts.
 """
+import os
 import uuid
 import chromadb
 
 BASE_COLLECTION_NAME = "RAG_files"
-chroma_client = chromadb.PersistentClient(path="chroma_db")  # persists locally
-
+BASE_DIR = os.path.dirname(os.path.dirname(__file__))  # go up from chroma_store to backend
+CHROMA_DB_PATH = os.path.join(BASE_DIR, "database", "chroma_db")
+chroma_client = chromadb.PersistentClient(path=CHROMA_DB_PATH)
 
 def get_or_create_collection():
     """

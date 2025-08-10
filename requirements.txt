@@ -1,9 +1,0 @@
-flask
-python-dotenv
-requests
-chromadb
-chardet
-PyPDF2
-python-docx
-flask-cors==4.0.0
-PyJWT==2.8.0
