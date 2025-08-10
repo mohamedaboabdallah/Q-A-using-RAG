@@ -139,4 +139,4 @@ For major changes, please open an issue first to discuss what you’d like to ch
 
 ## 📧 Contact
 
-For any inquiries, reach out via GitHub issues or email me at mohamed541416@gmail.com.
+For any inquiries, reach out via GitHub issues or email me at mohamed541416@gmail.com.  
