@@ -1,113 +1,132 @@
-"""
-Flask Web Application for Document Upload and RAG-based Chatbot.
-
-This application allows users to:
-1. Upload a document (.txt, .pdf, .docx).
-2. Extract its text content in-memory without saving the file.
-3. Store the extracted content in a local persistent ChromaDB collection.
-4. Interact with a chatbot that uses Retrieval-Augmented Generation (RAG)
-   to answer questions based on both the uploaded content and an LLM.
-
-Modules Used
-------------
-- flask:
-    For creating the web application and handling HTTP routes.
-- dotenv:
-    Loads environment variables from a .env file.
-- chroma_store.chroma_client:
-    Handles storing and querying text data in ChromaDB.
-- text_extraction.text_extractor:
-    Extracts text from file bytes depending on the file type.
-- llms.llms_accessing:
-    Provides the LLM interface to generate augmented chatbot responses.
-- requests.exceptions:
-    Handles network and HTTP errors gracefully.
-
-Routes
-------
-- GET  /           : Renders the upload page (`upload.html`).
-- POST /upload     : Handles file uploads, extracts text, stores it in ChromaDB,
-                     then redirects to the chatbot.
-- GET  /chatbot    : Renders the chatbot interface (`index.html`).
-- POST /chat       : Processes chat messages, retrieves relevant context
-                     from ChromaDB, and returns an LLM-generated reply.
-
-Workflow
---------
-1. User uploads a document.
-2. The file is read into memory, text is extracted, and stored in ChromaDB.
-3. The user is redirected to the chatbot interface.
-4. When the user sends a message, the app queries ChromaDB for related content.
-5. The retrieved context is combined with the user query and sent to the LLM.
-6. The LLM response is returned and displayed in the chatbot UI.
-
-This module is the main entry point for running the Flask development server.
-"""
-
-from flask import Flask, render_template, request, jsonify, redirect, url_for
+import os
+import jwt
+from datetime import datetime, timedelta
+from functools import wraps
+from flask import Flask, request, jsonify, make_response
+from flask_cors import CORS
 from dotenv import load_dotenv
 from requests.exceptions import RequestException, Timeout, HTTPError
 from llms.llms_accessing import llm_response
 from chroma_store.chroma_client import add_file_to_collection, query_collection
-from text_extraction.text_extractor import extract_text  # now works with file_bytes
+from text_extraction.text_extractor import extract_text
 
-# Load environment variables from .env
+# Load environment variables
 load_dotenv()
+from flask_cors import CORS
 
 app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": "http://localhost:3000"}})
+# JWT Configuration
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
+app.config['JWT_EXPIRATION'] = int(os.getenv('JWT_EXPIRATION', 3600))  # 1 hour
 
-@app.route('/')
-def upload_page():
-    """Render the upload page."""
-    return render_template('upload.html')
+def token_required(f):
+    """JWT Authentication Decorator"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        token = None
+        # Get token from Authorization header
+        if 'Authorization' in request.headers:
+            token = request.headers['Authorization'].split(" ")[1]
+        
+        if not token:
+            return jsonify({'error': 'Authorization token is missing'}), 401
 
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    """Handle file upload and store extracted text in ChromaDB."""
+        try:
+            data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+            current_user = data['sub']
+        except jwt.ExpiredSignatureError:
+            return jsonify({'error': 'Token has expired'}), 401
+        except jwt.InvalidTokenError:
+            return jsonify({'error': 'Invalid token'}), 401
+        except Exception as e:
+            return jsonify({'error': f'Token verification failed: {str(e)}'}), 401
+
+        return f(current_user, *args, **kwargs)
+
+    return decorated
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    auth = request.json
+    if not auth or not auth.get('username') or not auth.get('password'):
+        return jsonify({'error': 'Missing credentials'}), 400
+    
+    try:
+        # Accept any non-empty credentials
+        username = auth['username']
+        
+        # Create JWT token
+        token = jwt.encode({
+            'sub': username,
+            'iat': datetime.utcnow(),
+            'exp': datetime.utcnow() + timedelta(seconds=app.config['JWT_EXPIRATION'])
+        }, app.config['SECRET_KEY'], algorithm="HS256")
+        
+        return jsonify({
+            'token': token,
+            'username': username,
+            'expires_in': app.config['JWT_EXPIRATION']
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Login processing error: {str(e)}'}), 500
+
+@app.route('/api/upload', methods=['POST'])
+@token_required
+def upload_file(current_user):
+    """Handle file upload and store in ChromaDB"""
     if 'document' not in request.files:
-        return "No file part", 400
+        return jsonify({"error": "No file part"}), 400
 
     file = request.files['document']
     if file.filename == '':
-        return "No selected file", 400
+        return jsonify({"error": "No selected file"}), 400
 
     try:
-        # Read file directly into memory
+        # Check file extension
+        valid_extensions = {'.txt', '.pdf', '.docx'}
+        if not any(file.filename.lower().endswith(ext) for ext in valid_extensions):
+            return jsonify({"error": "Invalid file type"}), 400
+
+        # Read file into memory
         file_bytes = file.read()
 
-        # Extract text from bytes (text_extractor must support this)
+        # Extract text
         lines = extract_text(file_bytes, file.filename)
 
-        # Store extracted lines in ChromaDB
+        # Store in ChromaDB
         add_file_to_collection(lines, file.filename)
 
+        return jsonify({
+            "status": "success",
+            "message": "File processed successfully",
+            "filename": "yourfile.pdf"
+        })
+
     except ValueError as e:
-        return f"File processing error: {e}", 400
-
+        return jsonify({"error": f"Unsupported file type: {str(e)}"}), 400
     except (OSError, IOError) as e:
-        return f"File read error: {e}", 500
+        return jsonify({"error": f"File processing error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
 
-    # Redirect to chatbot page after successful processing
-    return redirect(url_for('chatbot'))
+@app.route('/api/chat', methods=['POST'])
+@token_required
+def chat(current_user):
+    """Handle chat requests with RAG"""
+    data = request.json
+    if not data or 'message' not in data:
+        return jsonify({"error": "Missing message parameter"}), 400
 
-@app.route('/chatbot')
-def chatbot():
-    """Render the chatbot page."""
-    return render_template('index.html')
-
-@app.route('/chat', methods=['POST'])
-def chat():
-    """
-    Handle chat requests and return an LLM response
-    augmented with retrieved context from ChromaDB.
-    """
-    user_message = request.json['message']
+    user_message = data['message']
+    
     try:
-        # Retrieve relevant docs from ChromaDB
+        # Retrieve relevant context
         retrieved_docs = query_collection(user_message, n_results=3)
-        context_text = "\n".join(sum(retrieved_docs, []))  # flatten list of lists
+        context_text = "\n".join(sum(retrieved_docs, []))  # flatten
 
-        # Augment user query with retrieved context
+        # Augment prompt with context
         augmented_prompt = f"""
         Use the following context to answer the question.
         Context:
@@ -119,16 +138,18 @@ def chat():
 
         reply = llm_response(augmented_prompt)
 
-    except Timeout:
-        reply = "Request timed out."
-    except ConnectionError:
-        reply = "Connection error occurred."
-    except HTTPError as e:
-        reply = f"HTTP error: {e.response.status_code}"
-    except RequestException as e:
-        reply = f"Unexpected request error: {str(e)}"
+        return jsonify({'reply': reply})
 
-    return jsonify({'reply': reply})
+    except Timeout:
+        return jsonify({'error': "Request timed out"}), 504
+    except ConnectionError:
+        return jsonify({'error': "Connection error"}), 503
+    except HTTPError as e:
+        return jsonify({'error': f"HTTP error: {e.response.status_code}"}), e.response.status_code
+    except RequestException as e:
+        return jsonify({'error': f"Request error: {str(e)}"}), 500
+    except Exception as e:
+        return jsonify({'error': f"Server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000, debug=True)
