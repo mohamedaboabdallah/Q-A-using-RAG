@@ -133,12 +133,10 @@ frontend/package.json
 
 ---
 ## 🤝 Contributing
-Pull requests are welcome!
-For major changes, please open an issue first to discuss what you’d like to change.
-If you have questions or need help, please open an issue or email me at mohamed541416@gmail.com .
-
+Pull requests are welcome!  
+For major changes, please open an issue first to discuss what you’d like to change.  
 ---
 
 ## 📧 Contact
 
-For any inquiries, reach out via GitHub issues or email.
+For any inquiries, reach out via GitHub issues or email me at mohamed541416@gmail.com.
