@@ -87,6 +87,8 @@ news_key=your_news_api_key
 ### 🔑 How to Get the Keys
 
 - **GROQ_API_KEY** — Sign up at [Groq Cloud](https://console.groq.com/) and create an API key from the dashboard.  
+- **news_key** - Sign up at [TheNewsApi](https://www.thenewsapi.com/) and create an API key from the dashboard.  
+- **currency_key** - Sign up at [Currency Layer](https://currencylayer.com/) and create an API key from the dashboard.
 - **SECRET_KEY** — A random string used by your application for cryptographic signing. You can generate one in Python:
   ```python
   import secrets
@@ -99,8 +101,6 @@ news_key=your_news_api_key
   import secrets
   print(secrets.token_hex(32))
   ```
-- **currency_key** - Sign up at [TheNewsApi](https://www.thenewsapi.com/) and create an API key from the dashboard.  
-- **currency_key** - Sign up at [Currency Layer](https://currencylayer.com/) and create an API key from the dashboard.
 ---
 
 ## ▶️ Running the Application
