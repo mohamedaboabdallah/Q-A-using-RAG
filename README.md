@@ -80,6 +80,8 @@ SECRET_KEY=your_app_secret
 JWT_EXPIRATION=3600
 JWT_REFRESH_EXPIRATION=86400
 JWT_SECRET_KEY=your_jwt_secret
+currency_key=your_currency_api_key
+news_key=your_news_api_key
 ```
 
 ### 🔑 How to Get the Keys
@@ -97,7 +99,8 @@ JWT_SECRET_KEY=your_jwt_secret
   import secrets
   print(secrets.token_hex(32))
   ```
-
+- **currency_key** - Sign up at [TheNewsApi](https://www.thenewsapi.com/) and create an API key from the dashboard.  
+- **currency_key** - Sign up at [Currency Layer](https://currencylayer.com/) and create an API key from the dashboard.
 ---
 
 ## ▶️ Running the Application
