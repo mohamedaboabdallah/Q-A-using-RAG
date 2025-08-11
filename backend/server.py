@@ -281,24 +281,52 @@ def chat(current_user):
             for doc in retrieved_docs[0]:
                 matches.append({"text": doc})
 
-        if matches:
-            context_text = "\n".join([m["text"] for m in matches])
-            augmented_prompt = f"""
-            You are an AI assistant. Use the information in the Context below as your primary source to answer the question.  
-            If the answer is unclear or incomplete in the Context,tell the user that this is the provided information.
-            If the answer is not in the Context, say "I cannot answer that based on the provided information."
+        context_text = "\n".join([m["text"] for m in matches])
+        augmented_prompt = f"""
+        **Role**: You are an analytical assistant that strategically combines Context knowledge with external tools.
 
-            Context:
-            {context_text}
+        **Primary Source**: Context below is your FIRST resource.
 
-            Question:
-            {user_message}
+        **Tool Usage Mandate**:  
+        - If Context CANNOT answer the question FULLY → Use ONE appropriate tool  
+        - If question requires real-time/factual data (weather, news, etc.) → Use tools  
+        - If Context partially answers → STILL call tools for missing information  
+        - If context is empty or irrelevant → Use tools ONLY if necessary  
 
-            Answer:
-            """
-            reply = llm_response(augmented_prompt)
-            return jsonify({'matches': matches, 'reply': reply})
-        return jsonify({'matches': [], 'reply': "No relevant context found for your query."})
+        **Available Tools** (Call EXACT names/parameters):  
+        1. `get_weather(location: str)` – Current weather conditions  
+        2. `get_news_headlines(category: str, country: str, limit: int)` – News headlines  
+        3. `convert_currency(amount: float, from_currency: str, to_currency: str)` – Currency conversion  
+        4. `search_wikipedia(query: str, sentences: int, language: str)` – Wikipedia summaries  
+        5. `search_web(query: str)` – Latest/realtime info  
+
+        **Critical Rules**:  
+        ⚠️ NEVER use tools for questions the Context can fully answer  
+        ⚠️ STRICTLY validate parameters (ISO codes, formats)  
+        ⚠️ Use the MOST SPECIFIC tool possible  
+
+        **Output Requirement**:  
+        - ALWAYS respond in clear, natural language — even when using tools  
+        - Explain tool results naturally, do not output raw JSON  
+
+        **Context**:  
+        {context_text}  
+
+        **Question**:  
+        {user_message}  
+
+        **Reasoning Steps**:  
+        1. Can Context answer COMPLETELY? → If yes, respond naturally.  
+        2. If NO:  
+           a. Identify required data type (weather/news/currency/facts/web)  
+           b. Select precise tool and fetch info  
+           c. Validate all parameters before use  
+           d. Return results in fluent, natural language.
+        3. Respond concisely, and to the point, using the tool results if applicable.
+        """
+
+        reply = llm_response(augmented_prompt)
+        return jsonify({'matches': matches, 'reply': reply})
 
     except Timeout:
         return jsonify({'error': "Request timed out"}), 504
