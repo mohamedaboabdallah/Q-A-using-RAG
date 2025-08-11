@@ -5,7 +5,6 @@ import requests
 import wikipedia
 from io import BytesIO
 from PIL import Image
-from datetime import datetime
 
 def format_api_response(response):
     """
