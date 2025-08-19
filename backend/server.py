@@ -43,208 +43,130 @@ This module is designed for local development and demonstration purposes.
 For production deployment, further security hardening and configuration
 are recommended.
 """
-
 import os
 from datetime import datetime
 import bcrypt
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 from dotenv import load_dotenv
 from requests.exceptions import RequestException, Timeout, HTTPError
+
 from llms.llms_accessing import llm_response
 from chroma_store.chroma_client import add_file_to_collection, query_collection
 from text_extraction.text_extractor import extract_text
 from user_auth.files_handling import load_json, save_json, get_user_files
 from user_auth.tokens_handling import token_required, generate_token
+
 load_dotenv()
 
-app = Flask(__name__)
+# === React build directory ===
+BUILD_DIR = os.path.join(os.path.dirname(__file__), "frontend/build")
 
-# Allow all origins for simplicity - restrict in production!
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+# === Flask app (with static assets) ===
+app = Flask(
+    __name__,
+    static_folder=os.path.join(BUILD_DIR, "static"),
+    static_url_path="/static"
+)
 
+# === CORS ===
+ENABLE_CORS = os.getenv("ENABLE_CORS", "false").lower() == "true"
+FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN")
+if ENABLE_CORS and FRONTEND_ORIGIN:
+    CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGIN}})
+else:
+    CORS(app, resources={r"/api/*": {"origins": "*"}})
+
+# === Config ===
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['JWT_EXPIRATION'] = int(os.getenv('JWT_EXPIRATION', '3600'))
+if os.getenv("MAX_CONTENT_LENGTH"):
+    app.config['MAX_CONTENT_LENGTH'] = int(os.getenv("MAX_CONTENT_LENGTH"))
 
+# === Data files ===
 USERS_FILE, FILES_FILE = get_user_files()
 users_db = load_json(USERS_FILE)
 uploaded_files = load_json(FILES_FILE)
 
-@app.route('/api/register', methods=['POST'])
+# ---------- Health ----------
+@app.get("/api/health")
+def api_health():
+    return {"ok": True}, 200
+
+# ---------- Auth ----------
+@app.post('/api/register')
 def register():
-    """
-    Register a new user with a username and password.
-
-    Expects a JSON payload with:
-        - "username": str, the desired username
-        - "password": str, the desired password
-
-    Validates input, checks if the username already exists, hashes the password
-    securely using bcrypt, and stores the user credentials persistently.
-
-    Also initializes an empty file list for the new user.
-
-    Returns:
-        - 201 Created: JSON with a JWT token and the registered username on success.
-        - 400 Bad Request: JSON error message if input is missing or username exists.
-    """
-    data = request.json
+    data = request.json or {}
     username = data.get('username')
     password = data.get('password')
-
     if not username or not password:
         return jsonify({'error': 'Missing username or password'}), 400
-
     if username in users_db:
         return jsonify({'error': 'User already exists'}), 400
-
-    # Hash password
-    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-    hashed_pw_str = hashed_pw.decode('utf-8')  # Convert bytes to str for JSON storage
-
-    # Store user
-    users_db[username] = hashed_pw_str
+    hashed_pw = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    users_db[username] = hashed_pw
     save_json(users_db, USERS_FILE)
-
-    # Initialize empty file list for this user
-    if username not in uploaded_files:
-        uploaded_files[username] = []
-        save_json(uploaded_files, FILES_FILE)
-
+    uploaded_files.setdefault(username, [])
+    save_json(uploaded_files, FILES_FILE)
     token = generate_token(username)
-
     return jsonify({'token': token, 'username': username}), 201
 
-@app.route('/api/login', methods=['POST'])
+@app.post('/api/login')
 def login():
-    """
-    Authenticate a user and generate a JWT token upon successful login.
-
-    Expects a JSON payload with:
-        - "username": str, the username
-        - "password": str, the user's password
-
-    Validates input, verifies the username exists, and checks the password
-    against the stored bcrypt hash.
-
-    On successful authentication, generates a JWT token and ensures the user's
-    uploaded files list is initialized.
-
-    Returns:
-        - 200 OK: JSON with JWT token and username on successful login.
-        - 400 Bad Request: JSON error if username or password is missing.
-        - 401 Unauthorized: JSON error if user not found or password is incorrect.
-    """
-    data = request.json
+    data = request.json or {}
     username = data.get('username')
     password = data.get('password')
-
     if not username or not password:
         return jsonify({'error': 'Missing username or password'}), 400
-
     hashed_pw_str = users_db.get(username)
-
     if not hashed_pw_str:
         return jsonify({'error': 'User not found'}), 401
-
-    hashed_pw = hashed_pw_str.encode('utf-8')  # Convert str back to bytes
-
-    if not bcrypt.checkpw(password.encode('utf-8'), hashed_pw):
+    if not bcrypt.checkpw(password.encode('utf-8'), hashed_pw_str.encode('utf-8')):
         return jsonify({'error': 'Incorrect password'}), 401
-
     token = generate_token(username)
-
-    # Ensure user has file list initialized
-    if username not in uploaded_files:
-        uploaded_files[username] = []
-        save_json(uploaded_files, FILES_FILE)
-
+    uploaded_files.setdefault(username, [])
+    save_json(uploaded_files, FILES_FILE)
     return jsonify({'token': token, 'username': username}), 200
 
-@app.route('/api/files', methods=['GET'])
+# ---------- Files ----------
+@app.get('/api/files')
 @token_required
 def get_files(current_user):
-    """
-    Retrieve the list of files uploaded by the authenticated user.
-
-    This endpoint is protected and requires a valid JWT token.
-
-    Args:
-        current_user (str): The username extracted from the JWT token by the decorator.
-
-    Returns:
-        - 200 OK: JSON containing a list of the user's uploaded files.
-        - 500 Internal Server Error: JSON error message if an unexpected error occurs.
-    """
     try:
-        user_files = uploaded_files.get(current_user, [])
-        return jsonify({"files": user_files})
+        return jsonify({"files": uploaded_files.get(current_user, [])})
     except (TypeError, ValueError) as e:
         return jsonify({"error": f"Data serialization error: {str(e)}"}), 500
 
-@app.route('/api/upload', methods=['POST'])
+@app.post('/api/upload')
 @token_required
 def upload_file(current_user):
-    """
-    Handle uploading and processing a document file for the authenticated user.
-
-    This endpoint expects a multipart form-data POST request with a file under
-    the 'document' key. Supported file types are .txt, .pdf, and .docx.
-
-    The file is read, text is extracted, and stored in a vector database (ChromaDB)
-    under the current user's namespace. Metadata about the upload is recorded
-    and persisted.
-
-    Args:
-        current_user (str): The username extracted from the JWT token by the decorator.
-
-    Returns:
-        - 200 OK: JSON confirming successful processing with the filename.
-        - 400 Bad Request: JSON error if no file part, no selected file,
-          or invalid file type.
-        - 500 Internal Server Error: JSON error for file processing or unexpected errors.
-    """
     if 'document' not in request.files:
         return jsonify({"error": "No file part"}), 400
-
     file = request.files['document']
     if file.filename == '':
         return jsonify({"error": "No selected file"}), 400
-
     try:
-        valid_extensions = {'.txt', '.pdf', '.docx'}
-        if not any(file.filename.lower().endswith(ext) for ext in valid_extensions):
+        valid_exts = {'.txt', '.pdf', '.docx'}
+        if not any(file.filename.lower().endswith(ext) for ext in valid_exts):
             return jsonify({"error": "Invalid file type"}), 400
-
         file_bytes = file.read()
         lines = extract_text(file_bytes, file.filename)
-
-        # Store file contents in chroma DB, per your original logic
         add_file_to_collection(lines, file.filename, user=current_user)
-
         file_info = {
             "id": len(uploaded_files.get(current_user, [])) + 1,
             "filename": file.filename,
             "uploaded_at": datetime.utcnow().isoformat()
         }
-
-        # Append to current user's uploaded files list
         uploaded_files.setdefault(current_user, []).append(file_info)
         save_json(uploaded_files, FILES_FILE)
-
-        return jsonify({
-            "status": "success",
-            "message": "File processed successfully",
-            "filename": file.filename
-        })
-
+        return jsonify({"status": "success", "message": "File processed successfully", "filename": file.filename})
     except ValueError as e:
         return jsonify({"error": f"Unsupported file type: {str(e)}"}), 400
     except (OSError, IOError) as e:
         return jsonify({"error": f"File processing error: {str(e)}"}), 500
 
-
-@app.route('/api/chat', methods=['POST'])
+# ---------- Chat ----------
+@app.post('/api/chat')
 @token_required
 def chat(current_user):
     """
@@ -336,5 +258,21 @@ def chat(current_user):
         return jsonify({'error': f"HTTP error: {e.response.status_code}"}), e.response.status_code
     except RequestException as e:
         return jsonify({'error': f"Request error: {str(e)}"}), 500
+
+# ---------- Serve React (catch-all) ----------
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def serve_react(path):
+    if path != "" and os.path.exists(os.path.join(BUILD_DIR, path)):
+        return send_from_directory(BUILD_DIR, path)
+    return send_from_directory(BUILD_DIR, "index.html")
+
+# ---------- Error handlers ----------
+@app.errorhandler(413)
+def too_large(_e):
+    return jsonify({"error": "File too large"}), 413
+
+# ---------- Entrypoint ----------
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    port = int(os.getenv('PORT', '8080'))  # Railway sets PORT
+    app.run(host='0.0.0.0', port=port, debug=False)

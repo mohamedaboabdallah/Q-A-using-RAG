@@ -3,8 +3,6 @@ import os
 import json
 import requests
 import wikipedia
-from io import BytesIO
-from PIL import Image
 
 def format_api_response(response):
     """

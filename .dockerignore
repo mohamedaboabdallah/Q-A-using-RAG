@@ -1,0 +1,33 @@
+# --- VCS & OS cruft ---
+.git
+.gitignore
+.DS_Store
+*.log
+
+# --- Python caches ---
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+
+# --- Node / frontend artifacts ---
+frontend/node_modules
+frontend/.cache
+frontend/.next
+frontend/dist
+# Keep build output out of context (we copy it from the builder stage)
+frontend/build
+
+# --- Virtualenvs & local env files ---
+.venv
+venv
+.env
+.env.*
+# If you pass env at run/build time, keeping them out of the image context is safer
+
+# --- Data & local caches ---
+backend/database/
+**/.cache/
+

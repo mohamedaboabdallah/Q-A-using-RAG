@@ -1,0 +1,28 @@
+# Python junk
+__pycache__/
+*.py[cod]
+*.log
+
+# VCS & editor
+.git
+.gitignore
+.vscode
+.idea
+.DS_Store
+
+# Secrets
+.env
+.env.*
+
+# Not needed in image
+tests/
+notebooks/
+examples/
+
+# If you have any of these, exclude them (HUGE):
+data/
+datasets/
+models/
+checkpoints/
+artifacts/
+database/
