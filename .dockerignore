@@ -1,7 +1,6 @@
 # --- VCS & OS cruft ---
 .git
 .gitignore
-.DS_Store
 *.log
 
 # --- Python caches ---
@@ -28,6 +27,5 @@ venv
 # If you pass env at run/build time, keeping them out of the image context is safer
 
 # --- Data & local caches ---
-backend/database/
 **/.cache/
 

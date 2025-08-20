@@ -17,10 +17,13 @@ Functions:
     - llm_response(msg_to_repond_to): Sends a message to the model and returns its reply.
         Returns a string on success, or a tuple (status_code, error_message) on failure.
 """
+import os
 from dotenv import load_dotenv
+import requests
+import json
 from backend.llms.tools import get_weather, convert_currency, get_news_headlines,search_wikipedia, search_web
 
-load_dotenv(override=False)
+load_dotenv()
 # ------------------- TOOL DEFINITIONS -------------------
 tool_kit = [
     {
@@ -114,54 +117,41 @@ def llm_response(msg_to_repond_to):
     """
     Send a user message to the Groq API using the LLaMA 3 model and return the generated response.
     """
-    import os, json, requests
-
-    # 1) read + sanitize key; fallback to OPENAI_API_KEY if needed
-    raw = os.getenv("GROQ_API_KEY") or os.getenv("OPENAI_API_KEY") or ""
-    api_key = raw.strip().strip('"').strip("'")
-    # (optional) debug: print only length, not the key itself
-    # print("GROQ key length:", len(api_key))
-
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        return (500, "Missing GROQ_API_KEY (or OPENAI_API_KEY)")
-
+        raise ValueError("Missing GROQ_API_KEY environment variable")
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {api_key}",
+        "Authorization": f"Bearer {api_key}"
     }
-
-    # 2) use a public model by default
-    model = "openai/gpt-oss-120b"
 
     payload = {
-        "model": model,
-        "messages": [{"role": "user", "content": msg_to_repond_to}],
+        "model": "openai/gpt-oss-120b",
+        "messages": [
+            {"role": "user", "content": msg_to_repond_to},
+        ],
+        "tools": tool_kit,      # Correct way to pass tools
+        "tool_choice": "auto",  # Let model decide when to call tools
         "temperature": 0.3,
         "max_tokens": 512,
-        "top_p": 0.9,
+        "top_p": 0.9
     }
-    # keep tools only if defined
-    if "tool_kit" in globals() and tool_kit:
-        payload["tools"] = tool_kit
-        payload["tool_choice"] = "auto"
 
-    # slightly longer timeout is fine
     response = requests.post(url, headers=headers, json=payload, timeout=50)
+    if response.status_code == 200:
+        result = response.json()
+        message = result["choices"][0]["message"]
 
-    if response.status_code != 200:
-        # surface exact reason: invalid_api_key vs forbidden vs model_not_found
-        try:
-            return (response.status_code, f"Groq error: {response.json()}")
-        except Exception:
-            return (response.status_code, f"Groq error: {response.text}")
+        # If the model calls a tool
+        if "tool_calls" in message:
+            for call in message["tool_calls"]:
+                func_name = call["function"]["name"]
+                args = json.loads(call["function"]["arguments"])
+                if func_name in tool_functions:
+                    tool_result = tool_functions[func_name](**args)
+                    return str(tool_result)
 
-    result = response.json()
-    msg = result["choices"][0]["message"]
-    if "tool_calls" in msg and "tool_functions" in globals():
-        for call in msg["tool_calls"]:
-            func_name = call["function"]["name"]
-            args = json.loads(call["function"]["arguments"])
-            if func_name in tool_functions:
-                return str(tool_functions[func_name](**args))
-    return msg.get("content", "")
+        # Otherwise, just return text
+        return message.get("content", "")
+    return (response.status_code, response.text)

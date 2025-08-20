@@ -51,16 +51,16 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from requests.exceptions import RequestException, Timeout, HTTPError
 
-from llms.llms_accessing import llm_response
-from chroma_store.chroma_client import add_file_to_collection, query_collection
-from text_extraction.text_extractor import extract_text
-from user_auth.files_handling import load_json, save_json, get_user_files
-from user_auth.tokens_handling import token_required, generate_token
+from backend.llms.llms_accessing import llm_response
+from backend.chroma_store.chroma_client import add_file_to_collection, query_collection
+from backend.text_extraction.text_extractor import extract_text
+from backend.user_auth.files_handling import load_json, save_json, get_user_files
+from backend.user_auth.tokens_handling import token_required, generate_token
 
-load_dotenv()
+load_dotenv(override=False)
 
 # === React build directory ===
-BUILD_DIR = os.path.join(os.path.dirname(__file__), "frontend/build")
+BUILD_DIR = os.getenv("FRONTEND_BUILD_DIR",os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "build")))
 
 # === Flask app (with static assets) ===
 app = Flask(
@@ -68,15 +68,6 @@ app = Flask(
     static_folder=os.path.join(BUILD_DIR, "static"),
     static_url_path="/static"
 )
-
-# === CORS ===
-ENABLE_CORS = os.getenv("ENABLE_CORS", "false").lower() == "true"
-FRONTEND_ORIGIN = os.getenv("FRONTEND_ORIGIN")
-if ENABLE_CORS and FRONTEND_ORIGIN:
-    CORS(app, resources={r"/api/*": {"origins": FRONTEND_ORIGIN}})
-else:
-    CORS(app, resources={r"/api/*": {"origins": "*"}})
-
 # === Config ===
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'default_secret_key')
 app.config['JWT_EXPIRATION'] = int(os.getenv('JWT_EXPIRATION', '3600'))
@@ -92,7 +83,6 @@ uploaded_files = load_json(FILES_FILE)
 @app.get("/api/health")
 def api_health():
     return {"ok": True}, 200
-
 # ---------- Auth ----------
 @app.post('/api/register')
 def register():
@@ -263,9 +253,17 @@ def chat(current_user):
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def serve_react(path):
-    if path != "" and os.path.exists(os.path.join(BUILD_DIR, path)):
+    target = os.path.join(BUILD_DIR, path)
+    index_html = os.path.join(BUILD_DIR, "index.html")
+
+    if path and os.path.exists(target):
         return send_from_directory(BUILD_DIR, path)
-    return send_from_directory(BUILD_DIR, "index.html")
+
+    if os.path.exists(index_html):
+        return send_from_directory(BUILD_DIR, "index.html")
+
+    # Fallback if build is missing (useful in backend-only dev runs)
+    return jsonify({"error": "Frontend build not found", "BUILD_DIR": BUILD_DIR}), 404
 
 # ---------- Error handlers ----------
 @app.errorhandler(413)

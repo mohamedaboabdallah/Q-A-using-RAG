@@ -39,6 +39,7 @@ export default function App() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/chatUpload" element={<ChatUpload />} />
+        <Route path="/chat" element={<sendMessage />} />
         <Route path="/ping" element={<Ping />} />
         <Route path="*" element={<div style={{padding:16}}>Not Found</div>} />
       </Routes>
