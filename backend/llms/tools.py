@@ -38,7 +38,7 @@ def format_api_response(response):
         )
 
     # --- WEATHER ---
-    if "temperature" in response and "condition" in response:
+    if "temperature_c" in response:
         return (
             f"🌤 **Weather in {response.get('location', 'Unknown')}**\n"
             f"Temp: {response['temperature']}°C\n"
@@ -83,7 +83,7 @@ def get_weather(location):
     params = {"latitude": lat, "longitude": lon, "current_weather": True, "timezone": "auto"}
 
     try:
-        response = requests.get(weather_url, params=params, timeout=5)
+        response = requests.get(weather_url, params=params, timeout=20)
         response.raise_for_status()
         data = response.json()
         current = data.get("current_weather")
