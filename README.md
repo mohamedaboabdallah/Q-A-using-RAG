@@ -5,7 +5,8 @@ It allows users to upload documents, extract content, store embeddings, and quer
 The system has a **Flask backend** and a **React frontend**.
 
 ---
-
+## Project demo link:
+- [PAPYRUS](https://papyrus-production-b97b.up.railway.app/login)
 ## 📂 Project Structure
 
 ```plaintext
